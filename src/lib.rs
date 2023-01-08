@@ -150,6 +150,7 @@ impl Clipboard {
         where T: Into<Option<Duration>>
     {
         let mut is_incr = false;
+        let mut is_notified = false;
         let timeout = timeout.into();
         let start_time =
             if timeout.is_some() { Some(Instant::now()) }
@@ -179,7 +180,8 @@ impl Clipboard {
             };
 
             match event {
-                Event::XfixesSelectionNotify(event) if use_xfixes => {
+                Event::XfixesSelectionNotify(event) if use_xfixes && ! is_notified => {
+                    is_notified = true;
                     self.getter.connection.convert_selection(
                         self.getter.window,
                         selection,
