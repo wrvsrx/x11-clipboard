@@ -48,6 +48,7 @@ pub fn run(context: &Arc<Context>, setmap: &SetMap, max_length: usize, receiver:
                 let &(target, ref value) = try_continue!(read_map.get(&event.selection));
 
                 if event.target == context.atoms.targets {
+                    // If target is TARGETS
                     let _ = x11rb::wrapper::ConnectionExt::change_property32(
                         &context.connection,
                         PropMode::REPLACE,
@@ -56,39 +57,42 @@ pub fn run(context: &Arc<Context>, setmap: &SetMap, max_length: usize, receiver:
                         Atom::from(AtomEnum::ATOM),
                         &[context.atoms.targets, target]
                     );
-                } else if value.len() < max_length - 24 {
-                    let _ = x11rb::wrapper::ConnectionExt::change_property8(
-                        &context.connection,
-                        PropMode::REPLACE,
-                        event.requestor,
-                        event.property,
-                        target,
-                        value
-                    );
-                } else {
-                    let _ = context.connection.change_window_attributes(
-                        event.requestor,
-                        &ChangeWindowAttributesAux::new()
-                            .event_mask(EventMask::PROPERTY_CHANGE)
-                    );
-                    let _ = x11rb::wrapper::ConnectionExt::change_property32(
-                        &context.connection,
-                        PropMode::REPLACE,
-                        event.requestor,
-                        event.property,
-                        context.atoms.incr,
-                        &[0u32; 0],
-                    );
-                    incr_map.insert(event.selection, event.property);
-                    state_map.insert(
-                        event.property,
-                        IncrState {
-                            selection: event.selection,
-                            requestor: event.requestor,
-                            property: event.property,
-                            pos: 0
-                        }
-                    );
+                } else if event.target == target {
+                    // If target is content in clipboard
+                    if value.len() < max_length - 24 {
+                        let _ = x11rb::wrapper::ConnectionExt::change_property8(
+                            &context.connection,
+                            PropMode::REPLACE,
+                            event.requestor,
+                            event.property,
+                            target,
+                            value
+                        );
+                    } else {
+                        let _ = context.connection.change_window_attributes(
+                            event.requestor,
+                            &ChangeWindowAttributesAux::new()
+                                .event_mask(EventMask::PROPERTY_CHANGE)
+                        );
+                        let _ = x11rb::wrapper::ConnectionExt::change_property32(
+                            &context.connection,
+                            PropMode::REPLACE,
+                            event.requestor,
+                            event.property,
+                            context.atoms.incr,
+                            &[0u32; 0],
+                        );
+                        incr_map.insert(event.selection, event.property);
+                        state_map.insert(
+                            event.property,
+                            IncrState {
+                                selection: event.selection,
+                                requestor: event.requestor,
+                                property: event.property,
+                                pos: 0
+                            }
+                        );
+                    }
                 }
                 let _ = context.connection.send_event(
                     false,
@@ -101,7 +105,14 @@ pub fn run(context: &Arc<Context>, setmap: &SetMap, max_length: usize, receiver:
                         requestor: event.requestor,
                         selection: event.selection,
                         target: event.target,
-                        property: event.property
+                        property: if event.target == context.atoms.targets || event.target == target
+                            {
+                                // Accept the request
+                                event.property
+                            } else {
+                                // Refuse the request
+                                Atom::from(AtomEnum::NONE)
+                            }
                     }
                 );
                 let _ = context.connection.flush();
